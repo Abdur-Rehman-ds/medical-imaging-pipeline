@@ -1,9 +1,0 @@
-# 3D U-Net baseline — Section 9.1 (Candidate Architectures), FR-3.1
-_target_: monai.networks.nets.UNet
-spatial_dims: 3
-in_channels: 4      # T1, T1ce, T2, FLAIR
-out_channels: 4     # background, NCR/NET, edema, enhancing tumor (FR-4.4)
-channels: [32, 64, 128, 256, 320]
-strides: [2, 2, 2, 2]
-num_res_units: 2
-norm: "instance"
