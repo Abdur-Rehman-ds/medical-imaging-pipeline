@@ -1,0 +1,21 @@
+# Inference API service — Section 10.1, 10.2
+# CUDA-enabled base for GPU inference; CPU-only fallback handled at
+# runtime (NFR Performance, Section 6.2 "detect absence of GPU").
+FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+COPY src/ src/
+COPY configs/ configs/
+
+# Serving layer loads the "active" model from the registry at startup
+# (Section 10.2) — do not bake a model checkpoint into this image.
+EXPOSE 8000
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

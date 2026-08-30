@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Data & artifacts — BraTS license forbids redistribution (Section 7.3);
+# raw/processed volumes and model checkpoints must never be committed.
+data/raw/
+data/processed/
+*.nii
+*.nii.gz
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+*.onnx
+mlruns/
+wandb/
+
+# DVC
+.dvc/cache
+.dvc/tmp
+
+# Env / secrets
+.env
+*.key
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Docker
+*.log

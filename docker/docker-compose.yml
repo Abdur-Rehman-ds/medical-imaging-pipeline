@@ -1,0 +1,54 @@
+# Local/all-in-one orchestration — Section 10.1
+# NOTE: Prometheus/Grafana intentionally left out of this baseline compose
+# file (marked optional in SRS Section 10.1) — add as a follow-up once
+# FR-7.x logging is implemented and there's something worth scraping.
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://pipeline:pipeline@postgres:5432/pipeline
+      - S3_ENDPOINT=http://minio:9000
+    depends_on:
+      - postgres
+      - minio
+    # Uncomment for GPU passthrough (requires NVIDIA Container Toolkit,
+    # Section 6.2 / NFR Portability):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  postgres:
+    image: postgres:16
+    environment:
+      - POSTGRES_USER=pipeline
+      - POSTGRES_PASSWORD=pipeline
+      - POSTGRES_DB=pipeline
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+volumes:
+  postgres_data:
+  minio_data:

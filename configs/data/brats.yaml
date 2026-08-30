@@ -1,0 +1,16 @@
+# Data config — FR-1.1 (accepted modalities), FR-1.5 (case storage),
+# Section 2.5 (patient-level split mandatory)
+modalities: ["t1", "t1ce", "t2", "flair"]
+label_key: "seg"
+
+# On Kaggle, point this at the mounted public BraTS dataset path
+# (Section 2.6: "assumed to be available as a mountable Kaggle public
+# dataset, avoiding a separate large download"). Set at run time.
+raw_data_dir: "/kaggle/input/brats2021"   # placeholder — confirm exact slug
+processed_cache_dir: "/kaggle/working/processed"
+
+# Split manifest — versioned file of case IDs + fold assignment, never a
+# duplicated data copy (Section 7.3). Patient-level, not slice-level.
+split_manifest: "configs/data/split_manifest.csv"
+num_folds: 5   # NOTE: Section 2.6 permits reducing this (e.g. 3-fold) if
+               # GPU-hour quota is tight — document the reduction if used.
