@@ -3,14 +3,14 @@
 modalities: ["t1", "t1ce", "t2", "flair"]
 label_key: "seg"
 
-# On Kaggle, point this at the mounted public BraTS dataset path
-# (Section 2.6: "assumed to be available as a mountable Kaggle public
-# dataset, avoiding a separate large download"). Set at run time.
-raw_data_dir: "/kaggle/input/brats2021"   # placeholder — confirm exact slug
+# Confirmed on Kaggle (2026-08-30): using BraTS2020 rather than 2021 —
+# permitted by Section 2.6 ("2020/2021 or later release"). Dataset:
+# awsaf49/brats20-dataset-training-validation (42.8 GB, CC0 license,
+# 369 training cases, 368 valid per data audit).
+raw_data_dir: "/kaggle/input/datasets/awsaf49/brats20-dataset-training-validation/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData"
 processed_cache_dir: "/kaggle/working/processed"
 
 # Split manifest — versioned file of case IDs + fold assignment, never a
 # duplicated data copy (Section 7.3). Patient-level, not slice-level.
 split_manifest: "configs/data/split_manifest.csv"
-num_folds: 5   # NOTE: Section 2.6 permits reducing this (e.g. 3-fold) if
-               # GPU-hour quota is tight — document the reduction if used.
+num_folds: 5
