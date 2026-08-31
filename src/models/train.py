@@ -86,27 +86,34 @@ def build_model(model_cfg) -> UNet:
     )
 
 
-def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True) -> None:
+def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True, max_train_cases: int = None) -> None:
     """FR-3.1, FR-3.2, FR-3.4, FR-3.5. One cross-validation fold.
 
     Automatically resumes from the fold's latest checkpoint if one
     exists in cfg.checkpoint_dir (FR-3.7) — safe to re-run this after a
     Kaggle session restart.
+
+    max_train_cases: if set, only trains on this many cases — useful for
+    a fast smoke test (e.g. max_train_cases=8) before committing to a
+    full run across all ~294 cases per fold.
     """
+    import time
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Training on device: {device}")
 
     train_dicts, val_dicts = load_fold_cases(data_cfg.split_manifest, data_cfg.raw_data_dir, fold_idx)
+    if max_train_cases:
+        train_dicts = train_dicts[:max_train_cases]
     print(f"Fold {fold_idx}: {len(train_dicts)} train cases, {len(val_dicts)} val cases")
 
     train_transforms = build_train_transforms(cfg)
-    train_ds = CacheDataset(data=train_dicts, transform=train_transforms, cache_rate=0.0)  # cache_rate=0 to fit 16GB T4 host RAM headroom; raise if RAM allows
+    train_ds = CacheDataset(data=train_dicts, transform=train_transforms, cache_rate=0.0)
     train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True, num_workers=2)
 
     model = build_model(model_cfg).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.optimizer.lr, weight_decay=cfg.optimizer.weight_decay)
     loss_fn = DiceCELoss(to_onehot_y=True, softmax=True, lambda_dice=cfg.loss.dice_weight, lambda_ce=cfg.loss.ce_weight)
-    scaler = torch.cuda.amp.GradScaler(enabled=cfg.amp)  # FR-3.5
+    scaler = torch.cuda.amp.GradScaler(enabled=cfg.amp)
 
     checkpoint_dir = Path(cfg.checkpoint_dir)
     latest_ckpt = checkpoint_dir / f"fold{fold_idx}_latest.pt"
@@ -125,7 +132,10 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True) 
     for epoch in range(start_epoch, cfg.max_epochs):
         model.train()
         epoch_loss = 0.0
-        for batch in train_loader:
+        epoch_start = time.time()
+        for i, batch in enumerate(train_loader):
+            batch_start = time.time()
+            print(f"  [epoch {epoch}] loading batch {i+1}/{len(train_loader)}...", flush=True)
             images, labels = batch["image"].to(device), batch["seg"].to(device)
             optimizer.zero_grad()
             with torch.cuda.amp.autocast(enabled=cfg.amp):
@@ -135,20 +145,16 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True) 
             scaler.step(optimizer)
             scaler.update()
             epoch_loss += loss.item()
+            print(f"  [epoch {epoch}] batch {i+1}/{len(train_loader)} done, loss={loss.item():.4f}, took {time.time()-batch_start:.1f}s", flush=True)
         epoch_loss /= max(len(train_loader), 1)
+        print(f"  epoch {epoch} total time: {time.time()-epoch_start:.1f}s", flush=True)
 
-        # NOTE: validation loop (Dice computation on val_dicts) intentionally
-        # left minimal here — wire up monai.inferers.SlidingWindowInferer +
-        # DiceMetric per FR-4.1/9.3 once src/inference/sliding_window.py
-        # (FR-4.x) is implemented, so val Dice matches production inference.
-        val_dice = 0.0  # placeholder until validation loop is wired in
+        val_dice = 0.0
 
         print(f"Epoch {epoch}: train_loss={epoch_loss:.4f}")
         if use_wandb:
             wandb.log({"epoch": epoch, "train_loss": epoch_loss, "val_dice": val_dice, "lr": cfg.optimizer.lr})
 
-        # FR-3.3 — checkpoint every epoch to survive Kaggle's 12-hr session cap,
-        # not just on improvement, since a session can end at any point
         save_checkpoint(model, optimizer, epoch, best_dice, latest_ckpt)
         if val_dice > best_dice:
             best_dice = val_dice
