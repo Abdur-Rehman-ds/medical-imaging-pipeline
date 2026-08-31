@@ -26,6 +26,7 @@ from monai.transforms import (
     DeleteItemsd,
     EnsureChannelFirstd,
     LoadImaged,
+    MapLabelValued,
     NormalizeIntensityd,
     Orientationd,
     RandFlipd,
@@ -90,6 +91,7 @@ def build_train_transforms(cfg) -> Compose:
 
     steps = _shared_load_and_normalize(ALL_KEYS)
     steps += [
+        MapLabelValued(keys=[LABEL_KEY], orig_labels=[0, 1, 2, 4], target_labels=[0, 1, 2, 3]),
         RandCropByPosNegLabeld(
             keys=["image", LABEL_KEY],
             label_key=LABEL_KEY,
