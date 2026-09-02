@@ -126,6 +126,10 @@ def build_train_transforms(cfg) -> Compose:
 def build_inference_transforms(cfg) -> Compose:
     """FR-2.1..2.3 only — no augmentation, no patch extraction (full-volume
     sliding-window handles patching at inference time, see
+    src/inference/sliding_window.py).
+    """
+    return Compose(_shared_load_and_normalize(MODALITY_KEYS))
+
 
 def build_val_transforms(cfg) -> Compose:
     """FR-2.1..2.3 + label remap — validation branch.
@@ -142,6 +146,3 @@ def build_val_transforms(cfg) -> Compose:
         ),
     ]
     return Compose(steps)
-    src/inference/sliding_window.py).
-    """
-    return Compose(_shared_load_and_normalize(MODALITY_KEYS))
