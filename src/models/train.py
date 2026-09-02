@@ -9,6 +9,7 @@ Implements:
   FR-3.7 — resume from any checkpoint without losing optimizer state
   FR-4.1 — sliding-window validation inference (configurable patch/overlap)
   FR-9.3 — per-region Dice (ET/TC/WT) reported for model selection
+  Section 9.2 — early stopping on validation Dice plateau
 
 CHECKPOINT PERSISTENCE (decision recorded 2026-08-30): checkpoints are
 saved to /kaggle/working/checkpoints/ and persisted across sessions by
@@ -22,6 +23,19 @@ validation runs every cfg.validation.val_interval epochs (default 5) and
 always on the final epoch — the SRS does not specify a frequency, and
 per-epoch full-volume validation would not fit the 30 GPU-hrs/week
 Kaggle quota. Set val_interval: 1 to validate every epoch.
+
+EARLY STOPPING (decision recorded 2026-09-02): SRS Section 9.2 says
+"configurable patience" without defining units. Interpretation: patience
+is measured in EPOCHS without val-Dice improvement, evaluated at each
+validation check — with val_interval=5 and patience=20, training stops
+after 4 consecutive checks with no new best. The no-improvement counter
+is persisted in checkpoints (with a backward-compatible default of 0 for
+checkpoints written before this change).
+
+TOP-K CHECKPOINTS (decision recorded 2026-09-02): improved-Dice
+checkpoints are saved as fold{i}_best_e{epoch}_d{dice}.pt and only the
+keep_top_k highest-Dice files are retained (FR-3.3). The best model is
+the highest-Dice file; there is no separate fold{i}_best.pt anymore.
 """
 
 import csv
@@ -42,10 +56,11 @@ from src.data.preprocessing import (
 )
 
 
-def save_checkpoint(model, optimizer, epoch: int, best_dice: float, path: Path) -> None:
+def save_checkpoint(model, optimizer, epoch: int, best_dice: float, path: Path,
+                    epochs_without_improvement: int = 0) -> None:
     """FR-3.3, FR-3.7. Persists model state, optimizer state, epoch
-    counter, and best_dice — all four, or resume silently diverges from
-    the true training state.
+    counter, best_dice, and the early-stopping counter — all of them, or
+    resume silently diverges from the true training state.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
@@ -54,17 +69,39 @@ def save_checkpoint(model, optimizer, epoch: int, best_dice: float, path: Path) 
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "best_dice": best_dice,
+            "epochs_without_improvement": epochs_without_improvement,
         },
         path,
     )
 
 
 def resume_from_checkpoint(path: Path, model, optimizer):
-    """FR-3.7. Returns (model, optimizer, start_epoch, best_dice)."""
+    """FR-3.7. Returns (model, optimizer, start_epoch, best_dice,
+    epochs_without_improvement). The .get() default keeps checkpoints
+    written before the early-stopping change loadable.
+    """
     ckpt = torch.load(path, map_location="cuda" if torch.cuda.is_available() else "cpu")
     model.load_state_dict(ckpt["model_state_dict"])
     optimizer.load_state_dict(ckpt["optimizer_state_dict"])
-    return model, optimizer, ckpt["epoch"] + 1, ckpt["best_dice"]
+    return (model, optimizer, ckpt["epoch"] + 1, ckpt["best_dice"],
+            ckpt.get("epochs_without_improvement", 0))
+
+
+def save_topk_checkpoint(model, optimizer, epoch: int, dice: float,
+                         checkpoint_dir: Path, fold_idx: int, keep_top_k: int) -> None:
+    """FR-3.3 — save an improved-Dice checkpoint and retain only the
+    keep_top_k highest-Dice files for this fold.
+    """
+    name = f"fold{fold_idx}_best_e{epoch:03d}_d{dice:.4f}.pt"
+    save_checkpoint(model, optimizer, epoch, dice, checkpoint_dir / name)
+    ranked = sorted(
+        checkpoint_dir.glob(f"fold{fold_idx}_best_e*.pt"),
+        key=lambda p: float(p.stem.split("_d")[-1]),
+        reverse=True,
+    )
+    for old in ranked[keep_top_k:]:
+        old.unlink()
+        print(f"  pruned {old.name} (keeping top {keep_top_k})", flush=True)
 
 
 def load_fold_cases(split_manifest_path: str, raw_data_dir: str, fold_idx: int):
@@ -157,7 +194,7 @@ def run_validation(model, val_loader, val_cfg, device, amp_enabled: bool) -> dic
 
 def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
                max_train_cases: int = None, max_val_cases: int = None) -> None:
-    """FR-3.1..3.5, FR-4.1, FR-9.3. One cross-validation fold.
+    """FR-3.1..3.5, FR-4.1, FR-9.3, Section 9.2. One cross-validation fold.
 
     Automatically resumes from the fold's latest checkpoint if one
     exists in cfg.checkpoint_dir (FR-3.7) — safe to re-run this after a
@@ -195,10 +232,11 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
 
     checkpoint_dir = Path(cfg.checkpoint_dir)
     latest_ckpt = checkpoint_dir / f"fold{fold_idx}_latest.pt"
-    start_epoch, best_dice = 0, 0.0
+    start_epoch, best_dice, epochs_without_improvement = 0, 0.0, 0
     if latest_ckpt.exists():
         print(f"Resuming from {latest_ckpt}")
-        model, optimizer, start_epoch, best_dice = resume_from_checkpoint(latest_ckpt, model, optimizer)
+        (model, optimizer, start_epoch, best_dice,
+         epochs_without_improvement) = resume_from_checkpoint(latest_ckpt, model, optimizer)
     else:
         print("No checkpoint found — starting fresh (epoch 0)")
 
@@ -206,7 +244,9 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
         import wandb
         wandb.init(project="brats-segmentation", name=f"fold{fold_idx}", resume="allow",
                    config={"fold": fold_idx, "lr": cfg.optimizer.lr, "batch_size": cfg.batch_size,
-                           "val_interval": cfg.validation.val_interval})
+                           "val_interval": cfg.validation.val_interval,
+                           "early_stopping_patience": cfg.early_stopping_patience,
+                           "keep_top_k": cfg.keep_top_k})
 
     for epoch in range(start_epoch, cfg.max_epochs):
         model.train()
@@ -236,6 +276,7 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
         )
 
         log_payload = {"epoch": epoch, "train_loss": epoch_loss, "lr": cfg.optimizer.lr}
+        stop_early = False
 
         if is_val_epoch:
             val_start = time.time()
@@ -254,21 +295,35 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
                 "val_dice_WT": scores["WT"],
                 "val_time_s": val_time,
             })
-            # FR-3.3 — update best_dice BEFORE saving the latest checkpoint,
-            # so a resumed session sees the true best (ordering bug fixed
-            # 2026-09-02: latest.pt previously stored a stale best_dice).
             if scores["mean"] > best_dice:
+                # FR-3.3 — update best_dice BEFORE saving latest, so a
+                # resumed session sees the true best.
                 best_dice = scores["mean"]
-                save_checkpoint(model, optimizer, epoch, best_dice,
-                                checkpoint_dir / f"fold{fold_idx}_best.pt")
-                print(f"  new best mean Dice: {best_dice:.4f} — saved best checkpoint", flush=True)
+                epochs_without_improvement = 0
+                save_topk_checkpoint(model, optimizer, epoch, best_dice,
+                                     checkpoint_dir, fold_idx, cfg.keep_top_k)
+                print(f"  new best mean Dice: {best_dice:.4f} — saved top-K checkpoint", flush=True)
+            else:
+                epochs_without_improvement += cfg.validation.val_interval
+                print(f"  no improvement for ~{epochs_without_improvement} epochs "
+                      f"(patience {cfg.early_stopping_patience})", flush=True)
+                if epochs_without_improvement >= cfg.early_stopping_patience:
+                    stop_early = True
         else:
             print(f"Epoch {epoch}: train_loss={epoch_loss:.4f} (no validation this epoch)", flush=True)
 
         if use_wandb:
             wandb.log(log_payload)
 
-        save_checkpoint(model, optimizer, epoch, best_dice, latest_ckpt)
+        save_checkpoint(model, optimizer, epoch, best_dice, latest_ckpt,
+                        epochs_without_improvement)
+
+        if stop_early:
+            # Section 9.2 — validation Dice plateaued; stop to save quota.
+            print(f"EARLY STOPPING at epoch {epoch}: no improvement for "
+                  f"{epochs_without_improvement} epochs (patience "
+                  f"{cfg.early_stopping_patience}). Best mean Dice: {best_dice:.4f}", flush=True)
+            break
 
     if use_wandb:
         wandb.finish()
