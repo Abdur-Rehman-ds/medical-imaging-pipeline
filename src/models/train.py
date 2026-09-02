@@ -7,6 +7,8 @@ Implements:
   FR-3.4 — log loss/Dice/LR to experiment tracker every run
   FR-3.5 — AMP + configurable gradient accumulation
   FR-3.7 — resume from any checkpoint without losing optimizer state
+  FR-4.1 — sliding-window validation inference (configurable patch/overlap)
+  FR-9.3 — per-region Dice (ET/TC/WT) reported for model selection
 
 CHECKPOINT PERSISTENCE (decision recorded 2026-08-30): checkpoints are
 saved to /kaggle/working/checkpoints/ and persisted across sessions by
@@ -14,19 +16,30 @@ committing the notebook version ("Save & Run All") at the end of each
 Kaggle session, and resumed at the start of the next by re-running this
 notebook against the committed output. This is the simplest option;
 revisit with S3/MinIO (per SRS Section 2.4) if this becomes a bottleneck.
+
+VALIDATION FREQUENCY (decision recorded 2026-09-02): full sliding-window
+validation runs every cfg.validation.val_interval epochs (default 5) and
+always on the final epoch — the SRS does not specify a frequency, and
+per-epoch full-volume validation would not fit the 30 GPU-hrs/week
+Kaggle quota. Set val_interval: 1 to validate every epoch.
 """
 
 import csv
+import time
 from pathlib import Path
 
 import torch
 from monai.data import CacheDataset, DataLoader
+from monai.inferers import SlidingWindowInferer
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from monai.networks.nets import UNet
-from monai.transforms import AsDiscrete
 
-from src.data.preprocessing import build_case_dict, build_train_transforms
+from src.data.preprocessing import (
+    build_case_dict,
+    build_train_transforms,
+    build_val_transforms,
+)
 
 
 def save_checkpoint(model, optimizer, epoch: int, best_dice: float, path: Path) -> None:
@@ -86,8 +99,65 @@ def build_model(model_cfg) -> UNet:
     )
 
 
-def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True, max_train_cases: int = None) -> None:
-    """FR-3.1, FR-3.2, FR-3.4, FR-3.5. One cross-validation fold.
+def labels_to_regions(labels: torch.Tensor) -> torch.Tensor:
+    """FR-9.3, SRS Section 7.1 — map a [B,1,...] label tensor in the
+    model's internal space {0,1,2,3} (4->3 remap already applied by
+    preprocessing) to binary region channels [B,3,...], ordered
+    (ET, TC, WT):
+      ET = {3}   (orig BraTS label 4, enhancing tumor)
+      TC = {1,3} (NCR/NET + enhancing)
+      WT = {1,2,3} (everything tumorous)
+    """
+    et = labels == 3
+    tc = (labels == 1) | (labels == 3)
+    wt = labels >= 1
+    return torch.cat([et, tc, wt], dim=1).float()
+
+
+def run_validation(model, val_loader, val_cfg, device, amp_enabled: bool) -> dict:
+    """FR-4.1, FR-4.2, FR-9.3 — full-volume sliding-window validation.
+
+    Patch size / overlap / gaussian blending mirror
+    configs/inference/default.yaml so validation measures the same
+    procedure production inference will use.
+    Returns {"ET": float, "TC": float, "WT": float, "mean": float}.
+    """
+    inferer = SlidingWindowInferer(
+        roi_size=tuple(val_cfg.sw_patch_size),
+        sw_batch_size=val_cfg.sw_batch_size,
+        overlap=val_cfg.sw_overlap,
+        mode="gaussian",
+    )
+    dice_metric = DiceMetric(include_background=True, reduction="mean_batch")
+
+    model.eval()
+    with torch.no_grad():
+        for i, batch in enumerate(val_loader):
+            images = batch["image"].to(device)
+            labels = batch["seg"].to(device)
+            with torch.cuda.amp.autocast(enabled=amp_enabled):
+                logits = inferer(images, model)
+            preds = torch.argmax(logits, dim=1, keepdim=True)
+            dice_metric(y_pred=labels_to_regions(preds), y=labels_to_regions(labels))
+            if (i + 1) % 10 == 0:
+                print(f"    validated {i + 1}/{len(val_loader)} cases...", flush=True)
+
+    per_region = dice_metric.aggregate()  # tensor [3] in (ET, TC, WT) order
+    dice_metric.reset()
+    model.train()
+
+    scores = {
+        "ET": per_region[0].item(),
+        "TC": per_region[1].item(),
+        "WT": per_region[2].item(),
+    }
+    scores["mean"] = (scores["ET"] + scores["TC"] + scores["WT"]) / 3.0
+    return scores
+
+
+def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
+               max_train_cases: int = None, max_val_cases: int = None) -> None:
+    """FR-3.1..3.5, FR-4.1, FR-9.3. One cross-validation fold.
 
     Automatically resumes from the fold's latest checkpoint if one
     exists in cfg.checkpoint_dir (FR-3.7) — safe to re-run this after a
@@ -96,19 +166,27 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True, 
     max_train_cases: if set, only trains on this many cases — useful for
     a fast smoke test (e.g. max_train_cases=8) before committing to a
     full run across all ~294 cases per fold.
+    max_val_cases: same idea for validation — e.g. max_val_cases=3 for a
+    smoke test so a validation pass takes minutes, not an hour.
     """
-    import time
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Training on device: {device}")
 
     train_dicts, val_dicts = load_fold_cases(data_cfg.split_manifest, data_cfg.raw_data_dir, fold_idx)
     if max_train_cases:
         train_dicts = train_dicts[:max_train_cases]
+    if max_val_cases:
+        val_dicts = val_dicts[:max_val_cases]
     print(f"Fold {fold_idx}: {len(train_dicts)} train cases, {len(val_dicts)} val cases")
 
     train_transforms = build_train_transforms(cfg)
     train_ds = CacheDataset(data=train_dicts, transform=train_transforms, cache_rate=0.0)
     train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True, num_workers=2)
+
+    val_transforms = build_val_transforms(cfg)
+    val_ds = CacheDataset(data=val_dicts, transform=val_transforms, cache_rate=0.0)
+    # batch_size=1: full volumes, sliding window handles patching (FR-4.1)
+    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=2)
 
     model = build_model(model_cfg).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.optimizer.lr, weight_decay=cfg.optimizer.weight_decay)
@@ -127,15 +205,14 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True, 
     if use_wandb:
         import wandb
         wandb.init(project="brats-segmentation", name=f"fold{fold_idx}", resume="allow",
-                   config={"fold": fold_idx, "lr": cfg.optimizer.lr, "batch_size": cfg.batch_size})
+                   config={"fold": fold_idx, "lr": cfg.optimizer.lr, "batch_size": cfg.batch_size,
+                           "val_interval": cfg.validation.val_interval})
 
     for epoch in range(start_epoch, cfg.max_epochs):
         model.train()
         epoch_loss = 0.0
         epoch_start = time.time()
         for i, batch in enumerate(train_loader):
-            batch_start = time.time()
-            print(f"  [epoch {epoch}] loading batch {i+1}/{len(train_loader)}...", flush=True)
             images, labels = batch["image"].to(device), batch["seg"].to(device)
             optimizer.zero_grad()
             with torch.cuda.amp.autocast(enabled=cfg.amp):
@@ -145,20 +222,53 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True, 
             scaler.step(optimizer)
             scaler.update()
             epoch_loss += loss.item()
-            print(f"  [epoch {epoch}] batch {i+1}/{len(train_loader)} done, loss={loss.item():.4f}, took {time.time()-batch_start:.1f}s", flush=True)
+            if (i + 1) % 25 == 0 or (i + 1) == len(train_loader):
+                print(f"  [epoch {epoch}] batch {i + 1}/{len(train_loader)}, "
+                      f"loss={loss.item():.4f}", flush=True)
         epoch_loss /= max(len(train_loader), 1)
-        print(f"  epoch {epoch} total time: {time.time()-epoch_start:.1f}s", flush=True)
+        print(f"  epoch {epoch} train time: {time.time() - epoch_start:.1f}s", flush=True)
 
-        val_dice = 0.0
+        # FR-4.1, FR-9.3 — validate every val_interval epochs, and always
+        # on the final epoch so no run ends without a fresh score.
+        is_val_epoch = (
+            (epoch + 1) % cfg.validation.val_interval == 0
+            or epoch == cfg.max_epochs - 1
+        )
 
-        print(f"Epoch {epoch}: train_loss={epoch_loss:.4f}")
+        log_payload = {"epoch": epoch, "train_loss": epoch_loss, "lr": cfg.optimizer.lr}
+
+        if is_val_epoch:
+            val_start = time.time()
+            scores = run_validation(model, val_loader, cfg.validation, device, cfg.amp)
+            val_time = time.time() - val_start
+            print(f"Epoch {epoch}: train_loss={epoch_loss:.4f} | "
+                  f"val Dice ET={scores['ET']:.4f} TC={scores['TC']:.4f} "
+                  f"WT={scores['WT']:.4f} mean={scores['mean']:.4f} "
+                  f"({val_time:.0f}s)", flush=True)
+            # FR-3.4 — per-region Dice logged only on epochs it was computed,
+            # so W&B charts show real points, not stale placeholders.
+            log_payload.update({
+                "val_dice_mean": scores["mean"],
+                "val_dice_ET": scores["ET"],
+                "val_dice_TC": scores["TC"],
+                "val_dice_WT": scores["WT"],
+                "val_time_s": val_time,
+            })
+            # FR-3.3 — update best_dice BEFORE saving the latest checkpoint,
+            # so a resumed session sees the true best (ordering bug fixed
+            # 2026-09-02: latest.pt previously stored a stale best_dice).
+            if scores["mean"] > best_dice:
+                best_dice = scores["mean"]
+                save_checkpoint(model, optimizer, epoch, best_dice,
+                                checkpoint_dir / f"fold{fold_idx}_best.pt")
+                print(f"  new best mean Dice: {best_dice:.4f} — saved best checkpoint", flush=True)
+        else:
+            print(f"Epoch {epoch}: train_loss={epoch_loss:.4f} (no validation this epoch)", flush=True)
+
         if use_wandb:
-            wandb.log({"epoch": epoch, "train_loss": epoch_loss, "val_dice": val_dice, "lr": cfg.optimizer.lr})
+            wandb.log(log_payload)
 
         save_checkpoint(model, optimizer, epoch, best_dice, latest_ckpt)
-        if val_dice > best_dice:
-            best_dice = val_dice
-            save_checkpoint(model, optimizer, epoch, best_dice, checkpoint_dir / f"fold{fold_idx}_best.pt")
 
     if use_wandb:
         wandb.finish()

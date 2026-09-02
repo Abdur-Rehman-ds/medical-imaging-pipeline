@@ -126,6 +126,22 @@ def build_train_transforms(cfg) -> Compose:
 def build_inference_transforms(cfg) -> Compose:
     """FR-2.1..2.3 only — no augmentation, no patch extraction (full-volume
     sliding-window handles patching at inference time, see
+
+def build_val_transforms(cfg) -> Compose:
+    """FR-2.1..2.3 + label remap — validation branch.
+
+    Full volume, no cropping, no augmentation: sliding-window inference
+    handles patching at validation time (FR-4.1). Includes the same
+    4->3 label remap as training so ground truth matches the model's
+    output label space {0,1,2,3} — Dice is silently wrong without it.
+    """
+    steps = _shared_load_and_normalize(ALL_KEYS)
+    steps += [
+        MapLabelValued(
+            keys=[LABEL_KEY], orig_labels=[0, 1, 2, 4], target_labels=[0, 1, 2, 3]
+        ),
+    ]
+    return Compose(steps)
     src/inference/sliding_window.py).
     """
     return Compose(_shared_load_and_normalize(MODALITY_KEYS))

@@ -40,4 +40,13 @@ cross_validation:
                                  # reducing folds if quota-constrained
   patient_level_split: true     # Section 2.5 — mandatory, do not change
 
-experiment_tracker: "mlflow"    # or "wandb" — FR-3.4, pick one
+experiment_tracker: "wandb"     # FR-3.4 — W&B is what train.py uses
+validation:                     # FR-3.3, FR-4.1, FR-9.3
+  val_interval: 5               # run full sliding-window validation every
+                                # N epochs (1 = every epoch). Chosen to fit
+                                # the 30 GPU-hrs/week quota — SRS doesn't
+                                # specify frequency; recorded 2026-09-02.
+  sw_patch_size: [128, 128, 128]  # matches configs/inference/default.yaml
+  sw_overlap: 0.5                 # FR-4.2 — keep consistent with inference
+  sw_batch_size: 2                # patches per forward pass; safe on 16GB
+                                  # T4 with no gradients. Drop to 1 if OOM.
