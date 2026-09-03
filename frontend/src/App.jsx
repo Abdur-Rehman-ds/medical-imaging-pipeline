@@ -1,4 +1,4 @@
-// App shell — FR-6.1 (upload), FR-6.2 (status), FR-6.3 (viewer),
+// App shell — FR-6.1 (upload), FR-6.2 (status), FR-6.3 (viewer+overlay),
 // FR-6.4 (volumes panel), FR-6.6 (disclaimer).
 import { useEffect, useRef, useState } from "react";
 import { Niivue } from "@niivue/niivue";
@@ -11,16 +11,33 @@ const DISCLAIMER =
 
 function App() {
   const canvasRef = useRef(null);
+  const nvRef = useRef(null);
   const [caseId, setCaseId] = useState(null);
   const [result, setResult] = useState(null);
 
+  // One Niivue instance for the app's lifetime; starts on the demo brain.
   useEffect(() => {
     const nv = new Niivue({ backColor: [0.05, 0.05, 0.08, 1] });
     nv.attachToCanvas(canvasRef.current);
     nv.loadVolumes([
       { url: "https://niivue.github.io/niivue-demo-images/mni152.nii.gz" },
     ]);
+    nvRef.current = nv;
   }, []);
+
+  // When a result arrives, show the case's T1ce + mask overlay (FR-6.3).
+  useEffect(() => {
+    if (!result || !caseId || !nvRef.current) return;
+    nvRef.current.loadVolumes([
+      { url: `/v1/cases/${caseId}/files/t1ce`, name: "t1ce.nii.gz" },
+      {
+        url: `/v1/cases/${caseId}/files/mask`,
+        name: "mask.nii.gz",
+        colormap: "nih",
+        opacity: 0.5,
+      },
+    ]);
+  }, [result, caseId]);
 
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", padding: 16 }}>
@@ -42,8 +59,8 @@ function App() {
       <canvas ref={canvasRef} style={{ width: "100%", height: 520 }} />
       <p style={{ color: "#888", fontSize: 13 }}>
         {result
-          ? "Result received — mask overlay in the viewer comes next."
-          : "Demo volume (MNI152) — will show the uploaded case's results."}
+          ? "Showing uploaded T1ce with segmentation overlay (50% opacity)."
+          : "Demo volume (MNI152) — upload a case and run inference to view results."}
       </p>
     </div>
   );
