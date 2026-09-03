@@ -34,7 +34,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from fastapi import BackgroundTasks, FastAPI, File, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from omegaconf import OmegaConf
 
 from src.data.ingestion import IngestionFailure, get_storage_dir, register_case
@@ -163,3 +163,26 @@ def list_models():
     """FR-5.4 (stub) — pending model-registry format decision."""
     return error_response(501, "NOT_IMPLEMENTED",
                           "Model listing pending registry decision (see SRS Appendix E)")
+
+
+@app.get("/v1/cases/{case_id}/files/{kind}")
+def get_case_file(case_id: str, kind: str):
+    """Serve a case's modality volume or its segmentation mask so the
+    frontend viewer (FR-6.3) can render scan + overlay. Extends FR-5.3's
+    result access; kinds: t1, t1ce, t2, flair, mask."""
+    if not case_dir(case_id).exists():
+        return error_response(404, "CASE_NOT_FOUND", f"No case {case_id}")
+    if kind == "mask":
+        mask_name = read_status(case_id).get("summary", {}).get("mask_file")
+        if not mask_name:
+            return error_response(404, "NO_MASK",
+                                  "No mask yet — run inference first")
+        path = case_dir(case_id) / "results" / mask_name
+    elif kind in ("t1", "t1ce", "t2", "flair"):
+        path = case_dir(case_id) / f"{case_id}_{kind}.nii.gz"
+    else:
+        return error_response(400, "BAD_KIND", f"Unknown file kind: {kind}")
+    if not path.exists():
+        return error_response(404, "FILE_NOT_FOUND", f"Missing: {path.name}")
+    return FileResponse(path, media_type="application/gzip",
+                        filename=path.name)
