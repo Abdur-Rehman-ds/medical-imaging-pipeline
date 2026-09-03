@@ -1,8 +1,7 @@
-// Frontend skeleton — FR-6.3 (slice viewer), FR-6.6 (disclaimer banner).
-// Loads a public demo brain (MNI152) to verify NiiVue rendering;
-// will be wired to our FastAPI backend (FR-5.1..5.3) next.
-import { useEffect, useRef } from "react";
+// App shell — FR-6.1 (upload), FR-6.3 (viewer), FR-6.6 (disclaimer).
+import { useEffect, useRef, useState } from "react";
 import { Niivue } from "@niivue/niivue";
+import UploadPanel from "./UploadPanel";
 
 const DISCLAIMER =
   "Research and educational use only. NOT a certified medical device. " +
@@ -10,6 +9,7 @@ const DISCLAIMER =
 
 function App() {
   const canvasRef = useRef(null);
+  const [caseId, setCaseId] = useState(null);
 
   useEffect(() => {
     const nv = new Niivue({ backColor: [0.05, 0.05, 0.08, 1] });
@@ -34,10 +34,15 @@ function App() {
       >
         {DISCLAIMER}
       </div>
+      <UploadPanel onUploaded={setCaseId} />
+      {caseId && (
+        <p style={{ fontSize: 14 }}>
+          Active case: <b>{caseId}</b> — inference controls come next.
+        </p>
+      )}
       <canvas ref={canvasRef} style={{ width: "100%", height: 520 }} />
       <p style={{ color: "#888", fontSize: 13 }}>
-        Demo volume (MNI152) — drag to rotate/scroll slices. Backend wiring
-        comes next.
+        Demo volume (MNI152) — will show the uploaded case's results next.
       </p>
     </div>
   );
