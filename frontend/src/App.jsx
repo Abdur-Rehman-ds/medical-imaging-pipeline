@@ -1,7 +1,9 @@
-// App shell — FR-6.1 (upload), FR-6.3 (viewer), FR-6.6 (disclaimer).
+// App shell — FR-6.1 (upload), FR-6.2 (status), FR-6.3 (viewer),
+// FR-6.4 (volumes panel), FR-6.6 (disclaimer).
 import { useEffect, useRef, useState } from "react";
 import { Niivue } from "@niivue/niivue";
 import UploadPanel from "./UploadPanel";
+import InferencePanel from "./InferencePanel";
 
 const DISCLAIMER =
   "Research and educational use only. NOT a certified medical device. " +
@@ -10,6 +12,7 @@ const DISCLAIMER =
 function App() {
   const canvasRef = useRef(null);
   const [caseId, setCaseId] = useState(null);
+  const [result, setResult] = useState(null);
 
   useEffect(() => {
     const nv = new Niivue({ backColor: [0.05, 0.05, 0.08, 1] });
@@ -35,14 +38,12 @@ function App() {
         {DISCLAIMER}
       </div>
       <UploadPanel onUploaded={setCaseId} />
-      {caseId && (
-        <p style={{ fontSize: 14 }}>
-          Active case: <b>{caseId}</b> — inference controls come next.
-        </p>
-      )}
+      {caseId && <InferencePanel caseId={caseId} onResult={setResult} />}
       <canvas ref={canvasRef} style={{ width: "100%", height: 520 }} />
       <p style={{ color: "#888", fontSize: 13 }}>
-        Demo volume (MNI152) — will show the uploaded case's results next.
+        {result
+          ? "Result received — mask overlay in the viewer comes next."
+          : "Demo volume (MNI152) — will show the uploaded case's results."}
       </p>
     </div>
   );
