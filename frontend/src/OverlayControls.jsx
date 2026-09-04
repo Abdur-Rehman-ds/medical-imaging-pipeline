@@ -1,5 +1,4 @@
-// FR-6.3 — per-label overlay toggles + overlay opacity control.
-// BraTS canonical labels: 1=NCR/NET (red), 2=edema (green), 4=enhancing (yellow).
+// FR-6.3 — per-label toggles + opacity. Styled per index.css.
 const LABELS = [
   { value: 1, name: "NCR/NET", rgb: [230, 60, 60] },
   { value: 2, name: "Edema", rgb: [60, 200, 90] },
@@ -8,50 +7,26 @@ const LABELS = [
 
 function OverlayControls({ visible, opacity, onToggle, onOpacity }) {
   return (
-    <div
-      style={{
-        background: "#16161d",
-        border: "1px solid #2a2a35",
-        borderRadius: 8,
-        padding: "10px 16px",
-        marginBottom: 12,
-        display: "flex",
-        gap: 24,
-        alignItems: "center",
-        flexWrap: "wrap",
-        fontSize: 14,
-      }}
-    >
-      <b>Overlay:</b>
+    <div className="card" style={{ display: "flex", gap: 26, alignItems: "center",
+                                   flexWrap: "wrap", padding: "12px 20px" }}>
+      <b style={{ fontSize: 14 }}>Overlay</b>
       {LABELS.map((l) => (
-        <label key={l.value} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <input
-            type="checkbox"
-            checked={visible[l.value]}
-            onChange={() => onToggle(l.value)}
-          />
-          <span
-            style={{
-              width: 12,
-              height: 12,
-              borderRadius: 2,
-              background: `rgb(${l.rgb.join(",")})`,
-              display: "inline-block",
-            }}
-          />
+        <label key={l.value} style={{ display: "flex", gap: 7, alignItems: "center",
+                                      fontSize: 13.5, cursor: "pointer" }}>
+          <input type="checkbox" checked={visible[l.value]}
+                 onChange={() => onToggle(l.value)} />
+          <span style={{ width: 11, height: 11, borderRadius: 3,
+                         background: `rgb(${l.rgb.join(",")})`,
+                         display: "inline-block" }} />
           {l.name}
         </label>
       ))}
-      <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <label style={{ display: "flex", gap: 10, alignItems: "center",
+                      fontSize: 13.5, marginLeft: "auto" }}>
         Opacity
-        <input
-          type="range"
-          min="0"
-          max="100"
-          value={Math.round(opacity * 100)}
-          onChange={(e) => onOpacity(Number(e.target.value) / 100)}
-        />
-        {Math.round(opacity * 100)}%
+        <input type="range" min="0" max="100" value={Math.round(opacity * 100)}
+               onChange={(e) => onOpacity(Number(e.target.value) / 100)} />
+        <span className="muted" style={{ width: 34 }}>{Math.round(opacity * 100)}%</span>
       </label>
     </div>
   );

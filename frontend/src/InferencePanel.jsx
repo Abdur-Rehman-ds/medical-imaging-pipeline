@@ -1,5 +1,4 @@
-// FR-6.2 (status states) + FR-6.4 (volumes, model version).
-// Triggers POST /v1/cases/{id}/infer, polls GET /v1/cases/{id}/result.
+// FR-6.2 + FR-6.4 — trigger, poll, results. Styled per index.css.
 import { useEffect, useRef, useState } from "react";
 
 function InferencePanel({ caseId, onResult }) {
@@ -8,11 +7,8 @@ function InferencePanel({ caseId, onResult }) {
   const [error, setError] = useState("");
   const timerRef = useRef(null);
 
-  // Reset when a new case is uploaded.
   useEffect(() => {
-    setStatus("idle");
-    setResult(null);
-    setError("");
+    setStatus("idle"); setResult(null); setError("");
     return () => clearInterval(timerRef.current);
   }, [caseId]);
 
@@ -30,68 +26,47 @@ function InferencePanel({ caseId, onResult }) {
         setStatus("failed");
         setError(data.error || data.message || "Inference failed");
       }
-    } catch {
-      /* transient network error — keep polling */
-    }
+    } catch { /* transient — keep polling */ }
   }
 
   async function run() {
     setError("");
     const res = await fetch(`/v1/cases/${caseId}/infer`, { method: "POST" });
     const data = await res.json();
-    if (!res.ok) {
-      setError(data.message || `Error ${res.status}`);
-      return;
-    }
+    if (!res.ok) { setError(data.message || `Error ${res.status}`); return; }
     setStatus("processing");
     timerRef.current = setInterval(poll, 3000);
   }
 
   return (
-    <div
-      style={{
-        background: "#16161d",
-        border: "1px solid #2a2a35",
-        borderRadius: 8,
-        padding: 16,
-        marginBottom: 16,
-      }}
-    >
-      <h2 style={{ margin: "0 0 12px 0", fontSize: 18 }}>
-        Inference — {caseId}
-      </h2>
-      <button
-        onClick={run}
-        disabled={status === "processing"}
-        style={{
-          padding: "8px 20px",
-          borderRadius: 6,
-          border: "none",
-          background: status === "processing" ? "#333" : "#3b8a5a",
-          color: "#fff",
-          cursor: status === "processing" ? "not-allowed" : "pointer",
-        }}
-      >
-        {status === "processing" ? "Processing…" : "Run Inference"}
-      </button>
-      {status === "processing" && (
-        <p style={{ fontSize: 14 }}>Running segmentation — this page checks
-        for the result every 3 seconds.</p>
-      )}
-      {error && <p style={{ color: "#e08080", fontSize: 14 }}>{error}</p>}
+    <div className="card">
+      <h2>Inference <span className="muted">— {caseId}</span></h2>
+      <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+        <button className="btn btn-success" onClick={run} disabled={status === "processing"}>
+          {status === "processing" ? "Processing…" : "Run Inference"}
+        </button>
+        {status === "processing" && (
+          <span className="muted">Running segmentation — checking every 3 s…</span>
+        )}
+        {error && <span style={{ color: "#e08080", fontSize: 13.5 }}>{error}</span>}
+      </div>
       {result && (
-        <div style={{ fontSize: 14, marginTop: 10 }}>
-          <b>Per-region volumes (cm³):</b>
-          <ul>
-            {Object.entries(result.per_label_volumes_mm3 || {}).map(
-              ([label, mm3]) => (
-                <li key={label}>
-                  {label}: {(mm3 / 1000).toFixed(2)}
-                </li>
-              )
-            )}
-          </ul>
-          <p>Model version: {result.model_version}</p>
+        <div style={{ marginTop: 16, display: "flex", gap: 28, flexWrap: "wrap" }}>
+          {Object.entries(result.per_label_volumes_mm3 || {}).map(([label, mm3]) => (
+            <div key={label}>
+              <div className="muted" style={{ textTransform: "uppercase",
+                    letterSpacing: "0.06em", fontSize: 11.5 }}>{label}</div>
+              <div style={{ fontSize: 22, fontWeight: 650 }}>
+                {(mm3 / 1000).toFixed(2)}
+                <span className="muted" style={{ fontSize: 13 }}> cm³</span>
+              </div>
+            </div>
+          ))}
+          <div>
+            <div className="muted" style={{ textTransform: "uppercase",
+                  letterSpacing: "0.06em", fontSize: 11.5 }}>Model</div>
+            <div style={{ fontSize: 22, fontWeight: 650 }}>{result.model_version}</div>
+          </div>
         </div>
       )}
     </div>
