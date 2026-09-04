@@ -21,6 +21,11 @@ optimizer:
   lr: 1e-4
   weight_decay: 1e-5
   lr_schedule: "cosine_annealing"
+scheduler:                      # Section 9.2 — implemented 2026-09-03
+  t_max: 120                    # cosine period in epochs: fold-0 plan is
+                                # 90 (done) + ~30 (chunk 3). Future folds
+                                # use the same 120-epoch shape from epoch 0.
+  eta_min: 1e-6                 # LR floor at the end of the cosine
 
 amp: true                       # FR-3.5 — required to fit 16GB T4
 grad_accumulation_steps: 1      # bump this instead of batch_size if OOM

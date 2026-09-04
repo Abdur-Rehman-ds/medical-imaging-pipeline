@@ -227,6 +227,12 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
 
     model = build_model(model_cfg).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.optimizer.lr, weight_decay=cfg.optimizer.weight_decay)
+    # Section 9.2 — cosine LR decay (SRS-specified; decision 2026-09-03:
+    # schedule is defined over cfg.scheduler.t_max total epochs and, on
+    # resume from a pre-scheduler checkpoint, is fast-forwarded to
+    # start_epoch so all folds share one schedule shape from epoch 0).
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=cfg.scheduler.t_max, eta_min=cfg.scheduler.eta_min)
     loss_fn = DiceCELoss(to_onehot_y=True, softmax=True, lambda_dice=cfg.loss.dice_weight, lambda_ce=cfg.loss.ce_weight)
     scaler = torch.cuda.amp.GradScaler(enabled=cfg.amp)
 
@@ -237,6 +243,8 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
         print(f"Resuming from {latest_ckpt}")
         (model, optimizer, start_epoch, best_dice,
          epochs_without_improvement) = resume_from_checkpoint(latest_ckpt, model, optimizer)
+        for _ in range(start_epoch):
+            scheduler.step()  # cosine is stateless-recomputable; see decision note above
     else:
         print("No checkpoint found — starting fresh (epoch 0)")
 
@@ -275,7 +283,7 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
             or epoch == cfg.max_epochs - 1
         )
 
-        log_payload = {"epoch": epoch, "train_loss": epoch_loss, "lr": cfg.optimizer.lr}
+        log_payload = {"epoch": epoch, "train_loss": epoch_loss, "lr": scheduler.get_last_lr()[0]}
         stop_early = False
 
         if is_val_epoch:
@@ -315,6 +323,7 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
         if use_wandb:
             wandb.log(log_payload)
 
+        scheduler.step()
         save_checkpoint(model, optimizer, epoch, best_dice, latest_ckpt,
                         epochs_without_improvement)
 
