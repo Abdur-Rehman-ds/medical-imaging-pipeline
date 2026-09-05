@@ -1,5 +1,7 @@
-// FR-6.2 + FR-6.4 — trigger, poll, results. Styled per index.css.
+// FR-6.2 + FR-6.4 — trigger, poll, results. FR-6.5 — JSON report export.
+// Styled per index.css.
 import { useEffect, useRef, useState } from "react";
+import { exportJson } from "./exportReport";
 
 function InferencePanel({ caseId, onResult }) {
   const [status, setStatus] = useState("idle");
@@ -66,6 +68,11 @@ function InferencePanel({ caseId, onResult }) {
             <div className="muted" style={{ textTransform: "uppercase",
                   letterSpacing: "0.06em", fontSize: 11.5 }}>Model</div>
             <div style={{ fontSize: 22, fontWeight: 650 }}>{result.model_version}</div>
+          </div>
+          <div style={{ alignSelf: "center", marginLeft: "auto" }}>
+            <button className="btn btn-outline" onClick={() => exportJson(caseId, result)}>
+              Download JSON
+            </button>
           </div>
         </div>
       )}
