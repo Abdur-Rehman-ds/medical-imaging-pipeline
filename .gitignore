@@ -37,5 +37,5 @@ wandb/
 
 # Docker
 *.log
-models/
-data/
+/models/
+/data/

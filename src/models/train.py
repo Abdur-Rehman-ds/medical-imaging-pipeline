@@ -172,7 +172,7 @@ def run_validation(model, val_loader, val_cfg, device, amp_enabled: bool) -> dic
         for i, batch in enumerate(val_loader):
             images = batch["image"].to(device)
             labels = batch["seg"].to(device)
-            with torch.cuda.amp.autocast(enabled=amp_enabled):
+            with torch.amp.autocast('cuda', enabled=amp_enabled):
                 logits = inferer(images, model)
             preds = torch.argmax(logits, dim=1, keepdim=True)
             dice_metric(y_pred=labels_to_regions(preds), y=labels_to_regions(labels))
@@ -234,7 +234,7 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=cfg.scheduler.t_max, eta_min=cfg.scheduler.eta_min)
     loss_fn = DiceCELoss(to_onehot_y=True, softmax=True, lambda_dice=cfg.loss.dice_weight, lambda_ce=cfg.loss.ce_weight)
-    scaler = torch.cuda.amp.GradScaler(enabled=cfg.amp)
+    scaler = torch.amp.GradScaler('cuda', enabled=cfg.amp)
 
     checkpoint_dir = Path(cfg.checkpoint_dir)
     latest_ckpt = checkpoint_dir / f"fold{fold_idx}_latest.pt"
@@ -250,7 +250,8 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
 
     if use_wandb:
         import wandb
-        wandb.init(project="brats-segmentation", name=f"fold{fold_idx}", resume="allow",
+        wandb.init(project="brats-segmentation", name=f"fold{fold_idx}-from-e{start_epoch}",
+                   group=f"fold{fold_idx}",
                    config={"fold": fold_idx, "lr": cfg.optimizer.lr, "batch_size": cfg.batch_size,
                            "val_interval": cfg.validation.val_interval,
                            "early_stopping_patience": cfg.early_stopping_patience,
@@ -263,7 +264,7 @@ def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
         for i, batch in enumerate(train_loader):
             images, labels = batch["image"].to(device), batch["seg"].to(device)
             optimizer.zero_grad()
-            with torch.cuda.amp.autocast(enabled=cfg.amp):
+            with torch.amp.autocast('cuda', enabled=cfg.amp):
                 outputs = model(images)
                 loss = loss_fn(outputs, labels)
             scaler.scale(loss).backward()
