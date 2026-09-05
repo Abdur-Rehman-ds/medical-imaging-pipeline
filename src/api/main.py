@@ -179,7 +179,10 @@ def get_case_file(case_id: str, kind: str):
                                   "No mask yet — run inference first")
         path = case_dir(case_id) / "results" / mask_name
     elif kind in ("t1", "t1ce", "t2", "flair"):
-        path = case_dir(case_id) / f"{case_id}_{kind}.nii.gz"
+        # Uploads keep their original NIfTI extension (.nii or .nii.gz) —
+        # locate whichever exists (bug found 2026-09-05 with real .nii data).
+        matches = sorted(case_dir(case_id).glob(f"{case_id}_{kind}.nii*"))
+        path = matches[0] if matches else case_dir(case_id) / f"{case_id}_{kind}.nii.gz"
     else:
         return error_response(400, "BAD_KIND", f"Unknown file kind: {kind}")
     if not path.exists():
