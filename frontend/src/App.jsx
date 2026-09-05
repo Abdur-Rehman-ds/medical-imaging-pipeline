@@ -1,4 +1,5 @@
-// App shell — FR-6.1/6.2/6.3/6.4/6.6. Styled per design system (index.css).
+// App shell — FR-6.1/6.2/6.3/6.4/6.6, snapshot provider for FR-6.5.
+// Styled per design system (index.css).
 import { useEffect, useRef, useState } from "react";
 import { Niivue } from "@niivue/niivue";
 import UploadPanel from "./UploadPanel";
@@ -68,6 +69,16 @@ function App() {
     applyOverlayStyle(visible, v);
   }
 
+  // FR-6.5 — capture the viewer as a PNG data URL. WebGL clears its
+  // drawing buffer between frames, so force a redraw immediately before
+  // toDataURL so the capture happens in the same frame as a draw.
+  function getSnapshot() {
+    const nv = nvRef.current;
+    if (!nv || !canvasRef.current) return null;
+    nv.drawScene();
+    return canvasRef.current.toDataURL("image/png");
+  }
+
   return (
     <>
       <header style={{ marginBottom: 6 }}>
@@ -78,7 +89,9 @@ function App() {
       </header>
       <div className="banner">{DISCLAIMER}</div>
       <UploadPanel onUploaded={setCaseId} />
-      {caseId && <InferencePanel caseId={caseId} onResult={setResult} />}
+      {caseId && (
+        <InferencePanel caseId={caseId} onResult={setResult} getSnapshot={getSnapshot} />
+      )}
       {result && (
         <OverlayControls
           visible={visible} opacity={opacity}

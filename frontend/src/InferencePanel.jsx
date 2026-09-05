@@ -1,9 +1,9 @@
-// FR-6.2 + FR-6.4 — trigger, poll, results. FR-6.5 — JSON report export.
+// FR-6.2 + FR-6.4 — trigger, poll, results. FR-6.5 — JSON/PDF report export.
 // Styled per index.css.
 import { useEffect, useRef, useState } from "react";
-import { exportJson } from "./exportReport";
+import { exportJson, exportPdf } from "./exportReport";
 
-function InferencePanel({ caseId, onResult }) {
+function InferencePanel({ caseId, onResult, getSnapshot }) {
   const [status, setStatus] = useState("idle");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -40,6 +40,11 @@ function InferencePanel({ caseId, onResult }) {
     timerRef.current = setInterval(poll, 3000);
   }
 
+  function downloadPdf() {
+    const snapshot = getSnapshot ? getSnapshot() : null;
+    exportPdf(caseId, result, snapshot);
+  }
+
   return (
     <div className="card">
       <h2>Inference <span className="muted">— {caseId}</span></h2>
@@ -69,9 +74,12 @@ function InferencePanel({ caseId, onResult }) {
                   letterSpacing: "0.06em", fontSize: 11.5 }}>Model</div>
             <div style={{ fontSize: 22, fontWeight: 650 }}>{result.model_version}</div>
           </div>
-          <div style={{ alignSelf: "center", marginLeft: "auto" }}>
+          <div style={{ alignSelf: "center", marginLeft: "auto", display: "flex", gap: 10 }}>
             <button className="btn btn-outline" onClick={() => exportJson(caseId, result)}>
               Download JSON
+            </button>
+            <button className="btn btn-outline" onClick={downloadPdf}>
+              Download PDF
             </button>
           </div>
         </div>
