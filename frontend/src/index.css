@@ -80,3 +80,20 @@ canvas.viewer {
   color: var(--accent);
 }
 .btn-outline:hover:not(:disabled) { background: rgba(79, 143, 247, 0.12); filter: none; }
+
+/* Animation pass (2026-09-05) — subtle motion, cosmetic only */
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.card { animation: cardIn 0.35s ease-out; }
+
+@keyframes softPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+.pulse { animation: softPulse 1.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .card, .pulse { animation: none; }
+}

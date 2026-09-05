@@ -53,7 +53,7 @@ function InferencePanel({ caseId, onResult, getSnapshot }) {
           {status === "processing" ? "Processing…" : "Run Inference"}
         </button>
         {status === "processing" && (
-          <span className="muted">Running segmentation — checking every 3 s…</span>
+          <span className="muted pulse">Running segmentation — checking every 3 s…</span>
         )}
         {error && <span style={{ color: "#e08080", fontSize: 13.5 }}>{error}</span>}
       </div>
