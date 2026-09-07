@@ -9,8 +9,7 @@ Implements:
   FR-6.6 / Section 14 — non-clinical-use disclaimer in every result body
 
   FR-5.4 — GET /v1/models             list local checkpoints + metrics
-Stubs (Should-priority, decisions pending — recorded 2026-09-02):
-  FR-5.6 — auth + rate limiting (needs auth-scheme decision)
+  FR-5.6 — X-API-Key auth (when API_KEY set) + per-client rate limit
 
 DESIGN (decision recorded 2026-09-02): FR-5.2/5.3 imply asynchronous
 inference — the trigger returns immediately and the caller polls the
@@ -27,6 +26,7 @@ never be mistaken for real results.
 import json
 import os
 import re
+import secrets
 import shutil
 import tempfile
 import uuid
@@ -34,7 +34,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from fastapi import BackgroundTasks, FastAPI, File, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from omegaconf import OmegaConf
 
@@ -42,7 +42,48 @@ from src.data.ingestion import IngestionFailure, get_storage_dir, register_case
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-app = FastAPI(title="Medical Imaging Diagnostic Pipeline API", version="1.0")
+# FR-5.6 (decision 2026-09-06, Appendix E #12): static API key via
+# X-API-Key header, enforced ONLY when the API_KEY env var is set —
+# unset keeps dev/tests/frontend-proxy unchanged. Rate limiting:
+# in-memory sliding window per client (key if authed, else client IP),
+# RATE_LIMIT_PER_MINUTE env var (default 60, 0 disables). Single-process
+# only by design; swappable for Redis without changing the API surface.
+import time as _time
+from collections import defaultdict, deque
+
+_rate_buckets: dict = defaultdict(deque)
+
+class ApiError(Exception):
+    def __init__(self, status: int, code: str, message: str):
+        self.status, self.code, self.message = status, code, message
+
+def require_api_key(request: Request):
+    configured = os.environ.get("API_KEY", "")
+    if configured:
+        provided = request.headers.get("X-API-Key", "")
+        if not secrets.compare_digest(provided, configured):
+            raise ApiError(401, "UNAUTHORIZED", "Missing or invalid API key")
+        client = "key"
+    else:
+        client = request.client.host if request.client else "unknown"
+    limit = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "60"))
+    if limit > 0:
+        now = _time.monotonic()
+        bucket = _rate_buckets[client]
+        while bucket and now - bucket[0] > 60:
+            bucket.popleft()
+        if len(bucket) >= limit:
+            raise ApiError(429, "RATE_LIMITED",
+                           f"Rate limit exceeded ({limit}/minute)")
+        bucket.append(now)
+
+app = FastAPI(title="Medical Imaging Diagnostic Pipeline API", version="1.0",
+              dependencies=[Depends(require_api_key)])
+
+@app.exception_handler(ApiError)
+def api_error_handler(request: Request, exc: ApiError):
+    """FR-5.7 — auth/rate-limit failures use the standard error structure."""
+    return error_response(exc.status, exc.code, exc.message)
 
 NON_CLINICAL_DISCLAIMER = (
     "Research/educational pipeline. NOT a certified medical device. "
