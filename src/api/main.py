@@ -8,8 +8,8 @@ Implements:
   FR-5.7 — structured error responses (error code, message, correlation ID)
   FR-6.6 / Section 14 — non-clinical-use disclaimer in every result body
 
+  FR-5.4 — GET /v1/models             list local checkpoints + metrics
 Stubs (Should-priority, decisions pending — recorded 2026-09-02):
-  FR-5.4 — GET /v1/models (needs model-registry format decision)
   FR-5.6 — auth + rate limiting (needs auth-scheme decision)
 
 DESIGN (decision recorded 2026-09-02): FR-5.2/5.3 imply asynchronous
@@ -26,6 +26,7 @@ never be mistaken for real results.
 
 import json
 import os
+import re
 import shutil
 import tempfile
 import uuid
@@ -158,11 +159,42 @@ def get_result(case_id: str):
     return status
 
 
+MODEL_NAME_RE = re.compile(
+    r"^fold(?P<fold>\d+)_best_e(?P<epoch>\d+)_d(?P<dice>0\.\d+)\.pt$")
+
+def parse_checkpoint_name(path: Path) -> dict:
+    """Decision 2026-09-06 (Appendix E #11): model metadata is parsed from
+    the checkpoint filename convention of Appendix E #5
+    (fold{i}_best_e{epoch}_d{dice}.pt). Non-conforming files are listed
+    with null metadata rather than rejected. Per-region ET/TC/WT Dice is
+    not encoded in filenames and lives in W&B; this endpoint reports only
+    locally-verifiable facts."""
+    m = MODEL_NAME_RE.match(path.name)
+    meta = {"version": path.stem,
+            "file_size_mb": round(path.stat().st_size / 1e6, 1),
+            "fold": None, "epoch": None, "val_dice_mean": None}
+    if m:
+        meta.update(fold=int(m.group("fold")), epoch=int(m.group("epoch")),
+                    val_dice_mean=float(m.group("dice")))
+    return meta
+
 @app.get("/v1/models")
 def list_models():
-    """FR-5.4 (stub) — pending model-registry format decision."""
-    return error_response(501, "NOT_IMPLEMENTED",
-                          "Model listing pending registry decision (see SRS Appendix E)")
+    """FR-5.4 — list locally available model versions with metrics.
+    Scans MODEL_DIR (default: models/) for .pt checkpoints; marks the one
+    currently served (MODEL_CHECKPOINT) as active."""
+    model_dir = Path(os.environ.get("MODEL_DIR", REPO_ROOT / "models"))
+    active_path = os.environ.get("MODEL_CHECKPOINT", "")
+    active_stem = Path(active_path).stem if active_path else None
+    models = []
+    if model_dir.is_dir():
+        for f in sorted(model_dir.glob("*.pt")):
+            meta = parse_checkpoint_name(f)
+            meta["active"] = (f.stem == active_stem)
+            models.append(meta)
+    return {"models": models,
+            "active_version": active_stem or "untrained-dev",
+            "disclaimer": NON_CLINICAL_DISCLAIMER}
 
 
 @app.get("/v1/cases/{case_id}/files/{kind}")
