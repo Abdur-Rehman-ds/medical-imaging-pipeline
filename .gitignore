@@ -39,3 +39,4 @@ wandb/
 *.log
 /models/
 /data/
+.coverage
