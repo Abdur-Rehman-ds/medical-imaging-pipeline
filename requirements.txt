@@ -19,6 +19,7 @@
 nibabel==5.4.2
 numpy==2.5.2
 monai==1.6.0
+scipy==1.18.1  # not imported by our code; MONAI loads it lazily for FR-4.3 post-processing transforms (connected components, hole-filling)
 torch==2.13.0+cpu
 
 # Serving layer (FR-5.x)

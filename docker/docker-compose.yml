@@ -1,11 +1,11 @@
 # Local/all-in-one orchestration — SRS Section 10.1.
 # Rewritten 09-Sep-2026: postgres + minio services removed — deferred by
 # Appendix E decision 7 (local-directory storage, no DB); they return if
-# and when that decision is revisited. Frontend service to be added once
-# its Dockerfile exists.
+# and when that decision is revisited.
 #
 # Run from repo root:  docker compose -f docker/docker-compose.yml up
-# Then:                curl http://localhost:8000/v1/models
+# Frontend:            http://localhost:8080
+# API direct:          curl http://localhost:8000/v1/models
 
 services:
   api:
@@ -29,6 +29,16 @@ services:
       # Uploaded cases persist across container restarts (FR-1.5;
       # decision 7 local-directory backend).
       - case_uploads:/app/data/uploads
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    ports:
+      # Host 8080 -> nginx 80; avoids colliding with the vite dev server.
+      - "8080:80"
+    depends_on:
+      - api
 
 volumes:
   case_uploads:
