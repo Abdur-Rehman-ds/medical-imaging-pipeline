@@ -1,7 +1,11 @@
-# Local/all-in-one orchestration — Section 10.1
-# NOTE: Prometheus/Grafana intentionally left out of this baseline compose
-# file (marked optional in SRS Section 10.1) — add as a follow-up once
-# FR-7.x logging is implemented and there's something worth scraping.
+# Local/all-in-one orchestration — SRS Section 10.1.
+# Rewritten 09-Sep-2026: postgres + minio services removed — deferred by
+# Appendix E decision 7 (local-directory storage, no DB); they return if
+# and when that decision is revisited. Frontend service to be added once
+# its Dockerfile exists.
+#
+# Run from repo root:  docker compose -f docker/docker-compose.yml up
+# Then:                curl http://localhost:8000/v1/models
 
 services:
   api:
@@ -11,44 +15,20 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://pipeline:pipeline@postgres:5432/pipeline
-      - S3_ENDPOINT=http://minio:9000
-    depends_on:
-      - postgres
-      - minio
-    # Uncomment for GPU passthrough (requires NVIDIA Container Toolkit,
-    # Section 6.2 / NFR Portability):
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-
-  postgres:
-    image: postgres:16
-    environment:
-      - POSTGRES_USER=pipeline
-      - POSTGRES_PASSWORD=pipeline
-      - POSTGRES_DB=pipeline
+      # Active checkpoint (Section 10.2); file must exist in ../models.
+      - MODEL_CHECKPOINT=${MODEL_CHECKPOINT:-models/fold0_best_e109_d0.8439.pt}
+      # FR-5.4 model listing scans this directory.
+      - MODEL_DIR=${MODEL_DIR:-models}
+      # FR-5.6: unset API_KEY = open API (local dev); set it to enforce auth.
+      - API_KEY=${API_KEY:-}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
-    volumes:
-      - minio_data:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+      # Checkpoints mounted read-only, never baked into the image
+      # (Sections 7.3, 10.2).
+      - ../models:/app/models:ro
+      # Uploaded cases persist across container restarts (FR-1.5;
+      # decision 7 local-directory backend).
+      - case_uploads:/app/data/uploads
 
 volumes:
-  postgres_data:
-  minio_data:
+  case_uploads:
