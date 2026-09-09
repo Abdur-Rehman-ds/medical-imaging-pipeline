@@ -1,0 +1,16 @@
+# Lint config — Section 10.3 CI runs `ruff check` against this.
+# Only deliberate deviations from ruff defaults are recorded here.
+
+[lint]
+ignore = [
+    # FastAPI's canonical idiom is `param: UploadFile = File(...)` in
+    # argument defaults (FR-5.1 upload endpoints) — B008 flags exactly
+    # that pattern; FastAPI evaluates these at route-definition time,
+    # so the usual "mutable default" hazard does not apply.
+    "B008",
+    # FR-5.7 requires every failure path to return a structured error
+    # with a correlation ID — the API's top-level `except Exception`
+    # handlers exist precisely to catch anything unforeseen; ingestion
+    # maps unreadable headers to IngestionError the same way (FR-1.3).
+    "BLE001",
+]

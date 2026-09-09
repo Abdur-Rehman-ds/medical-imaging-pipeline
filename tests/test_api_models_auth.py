@@ -1,8 +1,6 @@
 """Unit tests for FR-5.4 (model listing) and FR-5.6 (auth + rate limit).
 TestClient only — no server, no GPU. Complements test_api_local.py.
 """
-import importlib
-import os
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,7 +17,7 @@ def client(monkeypatch):
 
 
 def test_fr_5_4_lists_checkpoints_with_parsed_metadata(client, tmp_path, monkeypatch):
-    c, main = client
+    c, _main = client
     (tmp_path / "fold0_best_e109_d0.8439.pt").write_bytes(b"x" * 100)
     (tmp_path / "weird_name.pt").write_bytes(b"x")          # non-conforming
     monkeypatch.setenv("MODEL_DIR", str(tmp_path))
@@ -36,7 +34,7 @@ def test_fr_5_4_lists_checkpoints_with_parsed_metadata(client, tmp_path, monkeyp
 
 
 def test_fr_5_4_active_flag_follows_model_checkpoint(client, tmp_path, monkeypatch):
-    c, main = client
+    c, _main = client
     (tmp_path / "fold0_best_e109_d0.8439.pt").write_bytes(b"x")
     monkeypatch.setenv("MODEL_DIR", str(tmp_path))
     monkeypatch.setenv("MODEL_CHECKPOINT", str(tmp_path / "fold0_best_e109_d0.8439.pt"))
@@ -62,7 +60,7 @@ def test_fr_5_6_auth_enforced_when_key_set(client, monkeypatch):
 
 
 def test_fr_5_6_rate_limit_returns_429(client, monkeypatch):
-    c, main = client
+    c, _main = client
     monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "3")
     codes = [c.get("/v1/models").status_code for _ in range(5)]
     assert codes == [200, 200, 200, 429, 429]

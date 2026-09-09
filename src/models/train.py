@@ -193,7 +193,7 @@ def run_validation(model, val_loader, val_cfg, device, amp_enabled: bool) -> dic
 
 
 def train_fold(fold_idx: int, cfg, model_cfg, data_cfg, use_wandb: bool = True,
-               max_train_cases: int = None, max_val_cases: int = None) -> None:
+               max_train_cases: int | None = None, max_val_cases: int | None = None) -> None:
     """FR-3.1..3.5, FR-4.1, FR-9.3, Section 9.2. One cross-validation fold.
 
     Automatically resumes from the fold's latest checkpoint if one
