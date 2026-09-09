@@ -24,6 +24,7 @@ torch==2.13.0+cpu
 # Serving layer (FR-5.x)
 fastapi==0.141.1
 uvicorn[standard]==0.52.4
+python-multipart==0.0.32  # not imported by our code; FastAPI loads it dynamically for file-upload Form/File endpoints (FR-5.1)
 
 # Config
 omegaconf==2.3.1

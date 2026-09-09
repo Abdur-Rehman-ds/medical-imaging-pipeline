@@ -1,21 +1,26 @@
-# Inference API service — Section 10.1, 10.2
-# CUDA-enabled base for GPU inference; CPU-only fallback handled at
-# runtime (NFR Performance, Section 6.2 "detect absence of GPU").
-FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+# Inference API service — SRS Sections 10.1, 10.2.
+# CPU-only image (deliberate divergence from 10.1's CUDA wording, recorded
+# in Appendix E): matches the tested requirements.lock.txt torch==2.13.0+cpu
+# build and Section 6.2's required CPU fallback. A CUDA image variant is a
+# documented future item alongside GPU serving.
+FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 python3-pip \
-    && rm -rf /var/lib/apt/lists/*
+# Dependency layer — installs from the machine-generated lockfile
+# (Section 2.5 reproducibility), cached independently of code changes.
+COPY requirements.lock.txt .
+RUN pip install --no-cache-dir -r requirements.lock.txt
 
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
-
+# Application code only — .dockerignore keeps data/, models/, .venv out.
 COPY src/ src/
 COPY configs/ configs/
 
-# Serving layer loads the "active" model from the registry at startup
-# (Section 10.2) — do not bake a model checkpoint into this image.
+# Model checkpoints are volume-mounted at runtime, never baked in
+# (Section 10.2; BraTS-derived artifacts stay out of images, Section 7.3).
+# Run with e.g.:
+#   docker run -v ./models:/app/models:ro \
+#     -e MODEL_CHECKPOINT=models/fold0_best_e109_d0.8439.pt -p 8000:8000 <image>
+ENV PYTHONPATH=/app
 EXPOSE 8000
 CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,34 @@
+# Build-context exclusions — keeps images lean and keeps BraTS data and
+# model checkpoints OUT of images (Section 7.3: no redistribution;
+# Section 10.2: models are mounted/loaded at runtime, never baked in).
+.git
+.github
+.venv
+venv
+__pycache__
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+data/
+models/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.nii
+*.nii.gz
+wandb/
+mlruns/
+notebooks/
+docs/
+frontend/node_modules
+frontend/dist
+.env
+*.key
+*.log
+*.bak-v1
+Project_Handoff_v4.md
