@@ -31,6 +31,7 @@ python-multipart==0.0.32  # not imported by our code; FastAPI loads it dynamical
 omegaconf==2.3.1
 
 # Testing & lint (Sections 10.3, 11)
+httpx==0.28.1  # not imported by our code; fastapi.testclient (used by API tests) requires it
 pytest==9.1.1
 pytest-cov==7.1.0
 ruff==0.16.5
