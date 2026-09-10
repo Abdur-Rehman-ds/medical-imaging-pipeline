@@ -29,6 +29,7 @@ def main() -> None:
         os.environ.pop("MODEL_CHECKPOINT", None)  # force untrained-dev path
 
         from fastapi.testclient import TestClient
+
         from src.api.main import app
 
         client = TestClient(app)

@@ -1,7 +1,6 @@
 """Unit tests for src/inference/sliding_window.py — Section 11.
 Covers FR-4.1..4.5 on tiny synthetic volumes; CPU-only, no real data.
 """
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -9,8 +8,6 @@ import torch
 from omegaconf import OmegaConf
 
 from src.inference.sliding_window import (
-    BRATS_LABEL_NAMES,
-    INTERNAL_TO_BRATS,
     _clean_binary_mask,
     infer_case,
     postprocess,

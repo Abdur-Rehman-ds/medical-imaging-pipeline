@@ -28,6 +28,7 @@ def main() -> None:
         os.environ["CASE_STORAGE_DIR"] = str(Path(tmp) / "storage")
         os.environ.pop("MODEL_CHECKPOINT", None)
         from fastapi.testclient import TestClient
+
         from src.api.main import app
         client = TestClient(app)
 
