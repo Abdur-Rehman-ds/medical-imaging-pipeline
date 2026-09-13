@@ -4,6 +4,7 @@ inference, 400 on bad kind. Regression guard for the missing
 FileResponse import found 2026-09-03.
 Run:  PYTHONPATH=. .venv/bin/python tests/test_api_files_local.py
 """
+import gzip
 import io
 import os
 import tempfile
@@ -22,6 +23,17 @@ def make_nifti_bytes(shape=(32, 32, 24)) -> bytes:
     os.unlink(tmp_path)
     return data
 
+
+def nifti_shape_from_bytes(data: bytes):
+    """Parse a (possibly gzipped) NIfTI response body and return its shape.
+    Replaces byte-size thresholds: an untrained model on random input can
+    legitimately emit an all-background mask that gzips to a few hundred
+    bytes (CI run 59 flake, 2026-09-13) — size proves nothing; parseability
+    and shape do."""
+    if data[:2] == b"\x1f\x8b":
+        data = gzip.decompress(data)
+    img = nib.Nifti1Image.from_bytes(data)
+    return img.shape
 
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
@@ -43,8 +55,8 @@ def main() -> None:
         # Modality download works pre-inference
         r = client.get(f"/v1/cases/{case_id}/files/t1ce")
         assert r.status_code == 200, r.text
-        assert len(r.content) > 1000, "modality file suspiciously small"
-        print("modality download OK:", len(r.content), "bytes")
+        assert nifti_shape_from_bytes(r.content) == (32, 32, 24)
+        print("modality download OK:", len(r.content), "bytes, shape verified")
 
         # Mask before inference -> structured 404
         r = client.get(f"/v1/cases/{case_id}/files/mask")
@@ -66,8 +78,8 @@ def main() -> None:
         assert r.json()["status"] == "completed", r.json()
         r = client.get(f"/v1/cases/{case_id}/files/mask")
         assert r.status_code == 200, r.text
-        assert len(r.content) > 1000, "mask file suspiciously small"
-        print("mask download OK:", len(r.content), "bytes")
+        assert nifti_shape_from_bytes(r.content) == (32, 32, 24)
+        print("mask download OK:", len(r.content), "bytes, shape verified")
 
         # Unknown case -> 404
         r = client.get("/v1/cases/case_doesnotexist/files/t1")
