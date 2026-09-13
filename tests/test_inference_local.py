@@ -82,3 +82,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def test_main():
+    """Pytest wrapper — these script-style tests were invisible to pytest
+    (16 collected = other files only); found 2026-09-13. CI now runs them."""
+    main()
