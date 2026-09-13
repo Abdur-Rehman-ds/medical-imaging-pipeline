@@ -97,3 +97,9 @@ canvas.viewer {
 @media (prefers-reduced-motion: reduce) {
   .card, .pulse { animation: none; }
 }
+
+/* Multi-screen pass (2026-09-13, Section 6.1 redesign) */
+:root { --surface-2: #1b2130; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
