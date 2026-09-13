@@ -52,10 +52,10 @@ open — ignore.
 
 ## Remaining work (priority order)
 
-1. **DECIDE: 3-fold ensemble inference** (avg probabilities across the
-   three baseline fold checkpoints; expected ~+0.01-0.02 Dice; ~1 hr
-   GPU to measure on fold-0 val). Do this week within remaining quota,
-   or park. Either way record as Appendix E decision 19.
+1. RESOLVED (decision 19, SRS v1.7): ensemble inference SCOPED OUT —
+   no leakage-free evaluation exists (each fold's model trained on the
+   other four folds, so every candidate val set was training data for
+   2 of 3 members). No GPU spent. Attach SRS v1.7, not v1.6.
 2. Smaller Shoulds — build or formally scope out in Appendix E:
    FR-1.4 DICOM stub, FR-7.2/7.3 drift stats + alerts, load/security
    tests (Section 11).
