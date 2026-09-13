@@ -1,14 +1,12 @@
-// App shell — FR-6.1/6.2/6.3/6.4/6.6, snapshot provider for FR-6.5.
-// Styled per design system (index.css).
+// Viewer screen (Section 6.1) — FR-6.2/6.3/6.4, snapshot for FR-6.5.
+// Holds the Niivue canvas + overlay state (moved from the old App.jsx).
+// On mount, checks the case's result so completed cases re-opened from
+// History (or a page refresh) restore their overlay without re-running.
 import { useEffect, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 import { Niivue } from "@niivue/niivue";
-import UploadPanel from "./UploadPanel";
-import InferencePanel from "./InferencePanel";
-import OverlayControls, { LABELS } from "./OverlayControls";
-
-const DISCLAIMER =
-  "Research and educational use only. NOT a certified medical device. " +
-  "MUST NOT be used for clinical diagnosis or treatment decisions.";
+import InferencePanel from "../InferencePanel";
+import OverlayControls, { LABELS } from "../OverlayControls";
 
 function buildLabelColormap(visible, opacity) {
   const a = Math.round(opacity * 255);
@@ -20,22 +18,35 @@ function buildLabelColormap(visible, opacity) {
   return { R, G, B, A, labels: ["bg", "NCR/NET", "edema", "", "enhancing"] };
 }
 
-function App() {
+function ViewerPage() {
+  const { caseId } = useParams();
   const canvasRef = useRef(null);
   const nvRef = useRef(null);
-  const [caseId, setCaseId] = useState(null);
   const [result, setResult] = useState(null);
+
   const [visible, setVisible] = useState({ 1: true, 2: true, 4: true });
   const [opacity, setOpacity] = useState(0.6);
 
   useEffect(() => {
     const nv = new Niivue({ backColor: [0.043, 0.055, 0.078, 1] });
     nv.attachToCanvas(canvasRef.current);
-    nv.loadVolumes([
-      { url: "https://niivue.github.io/niivue-demo-images/mni152.nii.gz" },
-    ]);
     nvRef.current = nv;
   }, []);
+
+  // Restore a completed case on mount / case change (quick re-open).
+  useEffect(() => {
+    setResult(null);
+    let cancelled = false;
+    fetch(`/v1/cases/${caseId}/result`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && data.status === "completed") {
+          setResult(data.summary || data);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [caseId]);
 
   useEffect(() => {
     if (!result || !caseId || !nvRef.current) return;
@@ -69,9 +80,8 @@ function App() {
     applyOverlayStyle(visible, v);
   }
 
-  // FR-6.5 — capture the viewer as a PNG data URL. WebGL clears its
-  // drawing buffer between frames, so force a redraw immediately before
-  // toDataURL so the capture happens in the same frame as a draw.
+  // FR-6.5 — capture in the same frame as a forced redraw (WebGL
+  // clears its drawing buffer between frames).
   function getSnapshot() {
     const nv = nvRef.current;
     if (!nv || !canvasRef.current) return null;
@@ -81,17 +91,7 @@ function App() {
 
   return (
     <>
-      <header style={{ marginBottom: 6 }}>
-        <h1>BraTS Tumor Segmentation</h1>
-        <p className="muted" style={{ margin: "4px 0 0 0" }}>
-          Multi-modal MRI upload · 3D U-Net inference · interactive overlay review
-        </p>
-      </header>
-      <div className="banner">{DISCLAIMER}</div>
-      <UploadPanel onUploaded={setCaseId} />
-      {caseId && (
-        <InferencePanel caseId={caseId} onResult={setResult} getSnapshot={getSnapshot} />
-      )}
+      <InferencePanel caseId={caseId} onResult={setResult} getSnapshot={getSnapshot} />
       {result && (
         <OverlayControls
           visible={visible} opacity={opacity}
@@ -102,10 +102,10 @@ function App() {
       <p className="muted" style={{ marginTop: 10 }}>
         {result
           ? "Uploaded T1ce with segmentation overlay — use the controls above."
-          : "Demo volume (MNI152) — upload a case and run inference to view results."}
+          : "No results yet for this case — click Run Inference above."}
       </p>
     </>
   );
 }
 
-export default App;
+export default ViewerPage;
