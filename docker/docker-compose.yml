@@ -16,7 +16,7 @@ services:
       - "8000:8000"
     environment:
       # Active checkpoint (Section 10.2); file must exist in ../models.
-      - MODEL_CHECKPOINT=${MODEL_CHECKPOINT:-models/fold0_best_e109_d0.8439.pt}
+      - MODEL_CHECKPOINT=${MODEL_CHECKPOINT:-models/fold2_best_e099_d0.8590.pt}
       # FR-5.4 model listing scans this directory.
       - MODEL_DIR=${MODEL_DIR:-models}
       # FR-5.6: unset API_KEY = open API (local dev); set it to enforce auth.
