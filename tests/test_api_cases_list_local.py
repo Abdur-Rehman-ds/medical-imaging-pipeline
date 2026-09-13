@@ -80,7 +80,7 @@ def main() -> None:
         assert by_id[first]["model_version"] == "untrained-dev"
         assert by_id[second]["status"] == "uploaded"
         # first was updated most recently -> back on top
-        assert [c["case_id"] for c in r.json()["cases"]][0] == first
+        assert next(c["case_id"] for c in r.json()["cases"]) == first
         print("post-inference listing OK")
 
     print("ALL_CASES_LIST_TESTS_PASSED")
