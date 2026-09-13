@@ -76,11 +76,15 @@ def main() -> None:
         assert "disclaimer" in summary
         print("result:", {k: summary[k] for k in ("model_version", "per_label_volumes_mm3")})
 
-        # FR-5.4 — stub responds 501, structured
+        # FR-5.4 — implemented 2026-09-06 (Appendix E #11); the old
+        # 501-stub assert was stale until 2026-09-13.
         r = client.get("/v1/models")
-        assert r.status_code == 501
-        assert r.json()["error_code"] == "NOT_IMPLEMENTED"
-        print("models stub -> structured 501")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert isinstance(body["models"], list)
+        assert body["active_version"] == "untrained-dev"
+        assert "NOT a certified medical device" in body["disclaimer"]
+        print("models listing OK:", len(body["models"]), "checkpoint(s)")
 
     print("ALL_API_TESTS_PASSED")
 

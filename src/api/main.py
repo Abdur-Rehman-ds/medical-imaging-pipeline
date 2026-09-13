@@ -262,3 +262,31 @@ def get_case_file(case_id: str, kind: str):
         return error_response(404, "FILE_NOT_FOUND", f"Missing: {path.name}")
     return FileResponse(path, media_type="application/gzip",
                         filename=path.name)
+
+
+@app.get("/v1/cases")
+def list_cases():
+    """Section 6.1 History screen — list processed cases with status,
+    timestamp, and model version, newest first. Added for the frontend
+    multi-screen redesign (Appendix E decision #18); the only backend
+    change in that expansion."""
+    from datetime import datetime, timezone
+
+    storage = get_storage_dir()
+    cases = []
+    if storage.is_dir():
+        for d in storage.iterdir():
+            if not (d.is_dir() and d.name.startswith("case_")):
+                continue
+            status = read_status(d.name)
+            sf = d / "status.json"
+            mtime = (sf if sf.exists() else d).stat().st_mtime
+            cases.append({
+                "case_id": d.name,
+                "status": status.get("status", "uploaded"),
+                "updated_at": datetime.fromtimestamp(
+                    mtime, tz=timezone.utc).isoformat(),
+                "model_version": (status.get("summary") or {}).get("model_version"),
+            })
+    cases.sort(key=lambda c: c["updated_at"], reverse=True)
+    return {"cases": cases, "disclaimer": NON_CLINICAL_DISCLAIMER}
