@@ -74,6 +74,26 @@ Five layers, independently testable and deployable (SRS Section 3):
   CI (ruff, unit + integration tests, image builds, model-less API smoke
   test).
 
+```mermaid
+flowchart LR
+    subgraph client [Client]
+        B[Browser]
+    end
+    subgraph compose [Docker Compose stack]
+        F[React SPA<br/>nginx :8080] -->|/v1 proxy| A[FastAPI :8000]
+        A --> P[Preprocess<br/>RAS · 1 mm³ · z-score]
+        P --> I[Sliding-window inference<br/>3D U-Net]
+        I --> PP[Post-process<br/>CC filter · label remap]
+        PP --> R[(Case storage<br/>masks + summaries)]
+    end
+    subgraph training [Training — Kaggle free tier]
+        K[T4 notebooks<br/>checkpoint-resume] --> W[(Weights & Biases)]
+        K --> C[models/ checkpoints]
+    end
+    B --> F
+    C -.->|volume mount<br/>MODEL_CHECKPOINT| A
+```
+
 ## Repo layout
 
     configs/            Versioned YAML configs: data, model, training, inference
