@@ -26,6 +26,7 @@ training). This module maps predictions BACK to canonical BraTS labels
 import json
 import time
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import torch
@@ -56,7 +57,7 @@ def run_inference(volume: torch.Tensor, model, cfg, device=None) -> torch.Tensor
     model = model.to(device)
     model.eval()
     with torch.no_grad():
-        logits = inferer(volume.to(device), model)
+        logits = cast(torch.Tensor, inferer(volume.to(device), model))
         probs = torch.softmax(logits, dim=1)
     return probs.cpu()
 

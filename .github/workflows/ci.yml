@@ -1,8 +1,9 @@
 # CI — SRS Section 10.3: lint, unit tests, image builds, synthetic smoke
 # test on every PR and push to main. Rewritten 09-Sep-2026 from the
 # Aug-30 stub: Python 3.12 + requirements.lock.txt (Section 2.5), Docker
-# build + smoke-test jobs added; mypy non-blocking pending cleanup of 5
-# pre-existing union-narrowing errors (see Appendix E).
+# build + smoke-test jobs added. mypy BLOCKING since 17-Sep-2026: the 5
+# union-narrowing errors from Appendix E decision 16 are fixed (typing.cast
+# on nibabel/MONAI returns).
 name: CI
 
 on:
@@ -29,8 +30,7 @@ jobs:
       - name: Lint (ruff)
         run: ruff check src/ tests/
 
-      - name: Type-check (mypy, non-blocking)
-        continue-on-error: true
+      - name: Type-check (mypy)
         run: mypy src/ --ignore-missing-imports
 
       - name: Unit tests

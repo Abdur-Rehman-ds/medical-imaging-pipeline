@@ -41,6 +41,7 @@ the highest-Dice file; there is no separate fold{i}_best.pt anymore.
 import csv
 import time
 from pathlib import Path
+from typing import cast
 
 import torch
 from monai.data import CacheDataset, DataLoader
@@ -173,13 +174,13 @@ def run_validation(model, val_loader, val_cfg, device, amp_enabled: bool) -> dic
             images = batch["image"].to(device)
             labels = batch["seg"].to(device)
             with torch.amp.autocast('cuda', enabled=amp_enabled):
-                logits = inferer(images, model)
+                logits = cast(torch.Tensor, inferer(images, model))
             preds = torch.argmax(logits, dim=1, keepdim=True)
             dice_metric(y_pred=labels_to_regions(preds), y=labels_to_regions(labels))
             if (i + 1) % 10 == 0:
                 print(f"    validated {i + 1}/{len(val_loader)} cases...", flush=True)
 
-    per_region = dice_metric.aggregate()  # tensor [3] in (ET, TC, WT) order
+    per_region = cast(torch.Tensor, dice_metric.aggregate())  # tensor [3] in (ET, TC, WT) order
     dice_metric.reset()
     model.train()
 

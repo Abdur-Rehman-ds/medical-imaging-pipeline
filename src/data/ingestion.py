@@ -22,6 +22,7 @@ import uuid
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 
@@ -57,6 +58,7 @@ def validate_case(modality_paths: dict[str, Path]) -> list[IngestionError]:
     NIfTI -> all shapes and affines match (co-registration proxy).
     """
     import nibabel as nib
+    from nibabel.spatialimages import SpatialImage
 
     errors: list[IngestionError] = []
 
@@ -67,7 +69,7 @@ def validate_case(modality_paths: dict[str, Path]) -> list[IngestionError]:
     shapes, affines = [], []
     for m in REQUIRED_MODALITIES:
         try:
-            img = nib.load(str(modality_paths[m]))
+            img = cast(SpatialImage, nib.load(str(modality_paths[m])))
             shapes.append(img.shape)
             affines.append(img.affine)
         except Exception:
