@@ -32,6 +32,7 @@ omegaconf==2.3.1
 
 # Testing & lint (Sections 10.3, 11)
 httpx==0.28.1  # not imported by our code; fastapi.testclient (used by API tests) requires it
+pydicom  # test-only: generates synthetic DICOM series for the FR-1.4 stub test (pin added after resolve)
 pytest==9.1.1
 pytest-cov==7.1.0
 ruff==0.16.5
