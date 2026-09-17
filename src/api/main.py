@@ -39,6 +39,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from omegaconf import OmegaConf
 
 from src.data.ingestion import IngestionFailure, get_storage_dir, register_case
+from src.monitoring.logging import (
+    compute_input_drift_stats,
+    drift_score,
+    log_inference_event,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -131,6 +136,7 @@ def run_case_inference(cid: str) -> None:
     """Background task: preprocess -> sliding-window inference ->
     post-process -> persist results (FR-4.1..4.5 via src/inference)."""
     try:
+        _t0 = _time.monotonic()  # FR-7.1 latency
         from src.data.preprocessing import build_case_dict, build_inference_transforms
         from src.inference.sliding_window import infer_case
 
@@ -146,7 +152,23 @@ def run_case_inference(cid: str) -> None:
             model_version=version,
             voxel_volume_mm3=1.0,  # FR-2.2 — 1mm isotropic after resampling
         )
+        # FR-7.1/7.2/7.3 (Appendix E No.22): stats on the PREPROCESSED
+        # volume; drift score vs training reference; alert flag into the
+        # summary so it is visible in the API result, not only logs.
+        _stats = compute_input_drift_stats(np.asarray(image))
+        _score, _reason = drift_score(_stats)
+        _threshold = float(os.environ.get("DRIFT_THRESHOLD", "3.0"))
+        summary["drift"] = {
+            "score": _score, "score_reason": _reason,
+            "threshold": _threshold,
+            "alert": _score is not None and _score > _threshold,
+        }
         write_status(cid, status="completed", summary=summary)
+        log_inference_event(
+            case_id=cid, latency_s=_time.monotonic() - _t0,
+            input_shape=tuple(image.shape), model_version=version,
+            stats=_stats, score=_score, score_reason=_reason,
+        )
     except Exception as e:  # FR-5.7 — surface failures with a correlation ID
         write_status(cid, status="failed", error=str(e),
                      correlation_id=uuid.uuid4().hex[:12])

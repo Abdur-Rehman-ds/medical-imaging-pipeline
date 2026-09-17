@@ -8,7 +8,8 @@ from configs/data/split_manifest.csv:
   train = folds 1-4 (valid cases)
 Recorded as part of Appendix E decision No.17.
 """
-import csv, json
+import csv
+import json
 from pathlib import Path
 
 MANIFEST = Path("configs/data/split_manifest.csv")
