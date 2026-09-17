@@ -27,7 +27,6 @@ import json
 import os
 import re
 import secrets
-import shutil
 import tempfile
 import uuid
 from pathlib import Path
@@ -183,11 +182,21 @@ async def upload_case(
     (FR-1.5), return the case ID."""
     with tempfile.TemporaryDirectory() as tmp:
         paths = {}
+        # Section 11 security: per-file size cap (decision No.23), enforced
+        # while streaming so an oversize body is cut off, not buffered.
+        max_bytes = int(float(os.environ.get("MAX_UPLOAD_MB", "512")) * 1024 * 1024)
         for name, up in (("t1", t1), ("t1ce", t1ce), ("t2", t2), ("flair", flair)):
             suffix = "".join(Path(up.filename or f"{name}.nii.gz").suffixes) or ".nii.gz"
             dest = Path(tmp) / f"{name}{suffix}"
+            written = 0
             with dest.open("wb") as f:
-                shutil.copyfileobj(up.file, f)
+                while chunk := up.file.read(1024 * 1024):
+                    written += len(chunk)
+                    if written > max_bytes:
+                        return error_response(
+                            413, "PAYLOAD_TOO_LARGE",
+                            f"{name} exceeds MAX_UPLOAD_MB={max_bytes // (1024 * 1024)}")
+                    f.write(chunk)
             paths[name] = dest
         try:
             upload = register_case(paths)
