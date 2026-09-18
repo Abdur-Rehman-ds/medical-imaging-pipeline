@@ -1,0 +1,107 @@
+{
+  "n_cases": 369,
+  "t1": {
+    "mean": {
+      "mean_across_cases": 2.2014,
+      "std_across_cases": 0.1427
+    },
+    "std": {
+      "mean_across_cases": 0.6457,
+      "std_across_cases": 0.1211
+    },
+    "p1": {
+      "mean_across_cases": 0.3865,
+      "std_across_cases": 0.3435
+    },
+    "p50": {
+      "mean_across_cases": 2.2933,
+      "std_across_cases": 0.1514
+    },
+    "p99": {
+      "mean_across_cases": 3.1709,
+      "std_across_cases": 0.2612
+    },
+    "fg_fraction": {
+      "mean_across_cases": 0.1622,
+      "std_across_cases": 0.016
+    }
+  },
+  "t1ce": {
+    "mean": {
+      "mean_across_cases": 2.2029,
+      "std_across_cases": 0.1459
+    },
+    "std": {
+      "mean_across_cases": 0.6342,
+      "std_across_cases": 0.1412
+    },
+    "p1": {
+      "mean_across_cases": 0.4223,
+      "std_across_cases": 0.3614
+    },
+    "p50": {
+      "mean_across_cases": 2.2601,
+      "std_across_cases": 0.1628
+    },
+    "p99": {
+      "mean_across_cases": 3.4898,
+      "std_across_cases": 0.4523
+    },
+    "fg_fraction": {
+      "mean_across_cases": 0.1622,
+      "std_across_cases": 0.016
+    }
+  },
+  "t2": {
+    "mean": {
+      "mean_across_cases": 2.1058,
+      "std_across_cases": 0.1621
+    },
+    "std": {
+      "mean_across_cases": 0.9382,
+      "std_across_cases": 0.1857
+    },
+    "p1": {
+      "mean_across_cases": 0.3748,
+      "std_across_cases": 0.3757
+    },
+    "p50": {
+      "mean_across_cases": 1.8744,
+      "std_across_cases": 0.238
+    },
+    "p99": {
+      "mean_across_cases": 4.6941,
+      "std_across_cases": 0.6154
+    },
+    "fg_fraction": {
+      "mean_across_cases": 0.1622,
+      "std_across_cases": 0.016
+    }
+  },
+  "flair": {
+    "mean": {
+      "mean_across_cases": 2.1607,
+      "std_across_cases": 0.1609
+    },
+    "std": {
+      "mean_across_cases": 0.8086,
+      "std_across_cases": 0.1594
+    },
+    "p1": {
+      "mean_across_cases": 0.0487,
+      "std_across_cases": 0.2191
+    },
+    "p50": {
+      "mean_across_cases": 2.1831,
+      "std_across_cases": 0.2239
+    },
+    "p99": {
+      "mean_across_cases": 4.0286,
+      "std_across_cases": 0.7181
+    },
+    "fg_fraction": {
+      "mean_across_cases": 0.1615,
+      "std_across_cases": 0.0168
+    }
+  }
+}
