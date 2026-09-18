@@ -6,7 +6,7 @@ For any future conversation: attach this plus SRS v1.11 (docs/, source
 of truth, Appendix E decisions 1-23).
 
 Repo: https://github.com/Abdur-Rehman-ds/medical-imaging-pipeline
-Final commit: `35a007b`. CI green through run 73; 35 tests; mypy
+Final commit: `a4b8daa`. CI green through run 75; 35 tests; mypy
 blocking. Untracked locals: requirements.txt.bak-v1 (deletable).
 
 ## Final state
@@ -27,15 +27,15 @@ blocking. Untracked locals: requirements.txt.bak-v1 (deletable).
   out (decision 19). Zero GPU debt; nothing will ever need quota
   unless a NEW decision reopens something.
 - Served model: fold-2 baseline (fold2_best_e099_d0.8590.pt), compose
-  default. Drift monitoring live in the API; drift_score is null
-  (reason no-reference) until the optional follow-up below.
+  default. Drift monitoring FULLY live: reference stats committed
+  (21-Sep, commit a4b8daa, 369-case Kaggle CPU run) — a real training
+  case scores drift_score 0.6167 through the async API path.
 - SRS at v1.11; README/diagram/DEMO.md/LICENSE all current.
 
 ## Optional follow-ups (none block closure)
 
-1. Reference stats: run scripts/make_reference_stats.py in a Kaggle
-   CPU session against BraTS2020, commit the JSON to
-   configs/monitoring/ — turns drift_score from null to real. No GPU.
+1. DONE 21-Sep: reference stats generated and committed (a4b8daa);
+   drift_score live and verified.
 2. Demo video: docs/DEMO.md is the script; stack via
    docker compose -f docker/docker-compose.yml up -d.
 3. Delete requirements.txt.bak-v1.
@@ -54,6 +54,14 @@ what it changed; assert-anchored python patches fail loudly instead
 of mispatching; read live output numbers critically (fg_fraction 1.0
 exposed a real stats bug the unit tests missed); "Queued" in GitHub
 Actions is normal for a minute or two, not a failure.
+
+23 (NEW, 21-Sep). A background task that looks dead may be
+cold-starting: first inference after a container rebuild loads the
+model from scratch and can run far past the usual latency. Silence +
+stale status is not proof of failure — wait generously, check docker
+stats for CPU activity, and only then run the task synchronously
+(exec python -c) to surface the real exception. The boring answer
+("not finished yet") beat three fancy theories on 21-Sep.
 
 ## How the user works (for any future session)
 
